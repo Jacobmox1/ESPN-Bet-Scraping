@@ -1,0 +1,14 @@
+{
+    "type": [
+        3,
+        3,
+        3,
+        2
+    ],
+    "data": [
+        "Error in which(search() == \".conflicts\") : \n  R_Reprotect: only 3 protected items, can't reprotect index -2\n",
+        "Error in which(search() == \".conflicts\") : \n  R_Reprotect: only 3 protected items, can't reprotect index -2\n",
+        "Error in which(search() == \".conflicts\") : \n  R_Reprotect: only 3 protected items, can't reprotect index -2\n",
+        "\nRestarting R session...\n\n"
+    ]
+}

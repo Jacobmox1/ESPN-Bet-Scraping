@@ -1,0 +1,218 @@
+library(rjson)
+library(slackr)
+library(httr)
+slackr_bot1 <- function(...,
+                        channel=Sys.getenv("SLACK_CHANNEL"),
+                        username=Sys.getenv("SLACK_USERNAME"),
+                        icon_emoji=Sys.getenv("SLACK_ICON_EMOJI"),
+                        incoming_webhook_url=Sys.getenv("SLACK_INCOMING_URL_PREFIX")) {
+  
+  if (incoming_webhook_url == "") {
+    stop("No incoming webhook URL specified. Did you forget to call slackr_setup()?", call. = FALSE)
+  }
+  
+  if (icon_emoji != "") { icon_emoji <- sprintf(', "icon_emoji": "%s"', icon_emoji)  }
+  
+  resp_ret <- ""
+  
+  if (!missing(...)) {
+    
+    # mimics capture.output
+    
+    # get the arglist
+    args <- substitute(list(...))[-1L]
+    
+    # setup in-memory sink
+    rval <- NULL
+    fil <- textConnection("rval", "w", local = TRUE)
+    
+    sink(fil)
+    on.exit({
+      sink()
+      close(fil)
+    })
+    
+    # where we'll need to eval expressions
+    pf <- parent.frame()
+    
+    # how we'll eval expressions
+    evalVis <- function(expr) withVisible(eval(expr, pf))
+    
+    # for each expression
+    for (i in seq_along(args)) {
+      
+      expr <- args[[i]]
+      
+      # do something, note all the newlines...Slack ``` needs them
+      tmp <- switch(mode(expr),
+                    # if it's actually an expresison, iterate over it
+                    expression = {
+                      lapply(expr, evalVis)
+                    },
+                    # if it's a call or a name, eval, printing run output as if in console
+                    call = ,
+                    name = {
+                      list(evalVis(expr))
+                    },
+                    # if pretty much anything else (i.e. a bare value) just output it
+                    integer = ,
+                    double = ,
+                    complex = ,
+                    raw = ,
+                    logical = ,
+                    numeric = cat(sprintf("%s\n\n", as.character(expr))),
+                    character = cat(sprintf("%s\n\n", expr)),
+                    stop("mode of argument not handled at present by slackr"))
+      
+      for (item in tmp) if (item$visible) { cat(item$value); cat("\n") }
+    }
+    
+    on.exit()
+    
+    sink()
+    close(fil)
+    
+    # combined all of them (rval is a character vector)
+    output <- paste0(rval, collapse="\n")
+    
+    loc <- Sys.getlocale('LC_CTYPE')
+    Sys.setlocale('LC_CTYPE','C')
+    on.exit(Sys.setlocale("LC_CTYPE", loc))
+    
+    resp <- POST(url = incoming_webhook_url, encode = "form",
+                 add_headers(`Content-Type` = "application/x-www-form-urlencoded",
+                             Accept = "*/*"), body = URLencode(sprintf("payload={\"channel\": \"%s\", \"username\": \"%s\", \"text\": \"%s\"%s}",
+                                                                       channel, username, output, icon_emoji)))
+    warn_for_status(resp)
+  }
+  return(invisible())
+}
+
+
+data = fromJSON(file="https://cdn.wnba.com/static/json/staticData/scheduleLeagueV2_1.json")[["leagueSchedule"]]
+broadcasters = data[["broadcasterList"]]
+broadcaster_table = as.data.frame(broadcasters[1])
+for (a in 2:length(broadcasters))
+{
+  broadcaster_table = rbind(broadcaster_table,as.data.frame(broadcasters[a]))
+}
+
+gameDates = data[["gameDates"]]
+games = NULL
+for (b in 1:length(gameDates))
+{
+  tempDate = gameDates[[b]][["games"]]
+  for (c in 1:length(tempDate))
+  {
+    games = rbind(games,as.vector(tempDate[[c]]))
+  }
+}
+games = as.data.frame(games)
+broadcastDetails = NULL
+home_team = NULL
+away_team = NULL
+home_tri = NULL
+away_tri = NULL
+for (d in 1:length(games$gameId))
+{
+  broadcastDetails = rbind(broadcastDetails,as.vector(games$broadcasters[[d]]))
+  home_team = c(home_team,games$homeTeam[[d]][["teamCity"]])
+  away_team = c(away_team,games$awayTeam[[d]][["teamCity"]])
+  home_tri = c(home_tri,games$homeTeam[[d]][["teamTricode"]])
+  away_tri = c(away_tri,games$awayTeam[[d]][["teamTricode"]])
+}
+broadcastDetails = as.data.frame(broadcastDetails)
+games$home_team = home_team
+games$away_team = away_team
+games$home_tri = home_tri
+games$away_tri = away_tri
+natlTV_network_list = NULL
+homeTV_network_list = NULL
+awayTV_network_list = NULL
+for (e in 1:length(broadcastDetails$nationalTvBroadcasters))
+{
+  natlTV_network = "League Pass"
+  if (length(broadcastDetails[,1][[e]]) > 0)
+  {
+    if (length(broadcastDetails[,1][[e]]) > 1)
+    {
+      print("UH OH")
+    }
+    natlTV_network = broadcastDetails[,1][[e]][[1]][["broadcasterDisplay"]]
+  }
+  natlTV_network_list = c(natlTV_network_list,natlTV_network)
+  homeTV_network = ""
+  if (length(broadcastDetails[,4][[e]]) > 0)
+  {
+    if (length(broadcastDetails[,4][[e]]) > 1)
+    {
+      print("UH OH")
+    }
+    homeTV_network = broadcastDetails[,4][[e]][[1]][["broadcasterDisplay"]]
+  }
+  homeTV_network_list = c(homeTV_network_list,homeTV_network)
+  awayTV_network = ""
+  if (length(broadcastDetails[,7][[e]]) > 0)
+  {
+    if (length(broadcastDetails[,7][[e]]) > 1)
+    {
+      print("UH OH")
+    }
+    awayTV_network = broadcastDetails[,7][[e]][[1]][["broadcasterDisplay"]]
+  }
+  awayTV_network_list = c(awayTV_network_list,awayTV_network)
+}
+games$natl_broadcast = natlTV_network_list
+games$home_broadcast = homeTV_network_list
+games$away_broadcast = awayTV_network_list
+
+final_broadcast_info = games[which(games$gameId >= 1020000000),c(2,8,21:23,26,31:37)]
+final_broadcast_info = as.data.frame(apply(final_broadcast_info,2,as.character))
+
+dates_cleaned = strptime(final_broadcast_info$gameDateTimeEst,"%Y-%m-%dT%H:%M:%SZ",tz = "EST")
+final_broadcast_info$gameDate = format(dates_cleaned,"%Y-%m-%d")
+final_broadcast_info$gameTime = format(dates_cleaned,"%I:%M %p %Z")
+final_broadcast_info$gameTime = sub("EST","ET",final_broadcast_info$gameTime)
+final_broadcast_info$gameTime = sub("AM","a.m.",final_broadcast_info$gameTime)
+final_broadcast_info$gameTime = sub("PM","p.m.",final_broadcast_info$gameTime)
+final_broadcast_info$gameTime = sub(":00","",final_broadcast_info$gameTime)
+final_broadcast_info$gameTime = sub("01","1",final_broadcast_info$gameTime)
+final_broadcast_info$gameTime = sub("02","2",final_broadcast_info$gameTime)
+final_broadcast_info$gameTime = sub("03","3",final_broadcast_info$gameTime)
+final_broadcast_info$gameTime = sub("04","4",final_broadcast_info$gameTime)
+final_broadcast_info$gameTime = sub("05","5",final_broadcast_info$gameTime)
+final_broadcast_info$gameTime = sub("06","6",final_broadcast_info$gameTime)
+final_broadcast_info$gameTime = sub("07","7",final_broadcast_info$gameTime)
+final_broadcast_info$gameTime = sub("08","8",final_broadcast_info$gameTime)
+final_broadcast_info$gameTime = sub("09","9",final_broadcast_info$gameTime)
+
+final_broadcast_info$row_1 = paste0(final_broadcast_info$home_team,
+                                    " vs. ",
+                                    final_broadcast_info$away_team)
+final_broadcast_info$row_1[which(final_broadcast_info$gameSubtype == 'Commissioner')] = 
+  paste0(final_broadcast_info$row_1[which(final_broadcast_info$gameSubtype == 'Commissioner')]," :trophy:")
+final_broadcast_info$row_2 = paste0(":alarm_clock: ",
+                                    final_broadcast_info$gameTime)
+final_broadcast_info$row_3 = paste0(":tv: ",
+                                    final_broadcast_info$natl_broadcast)
+final_broadcast_info$all_together = paste(final_broadcast_info$row_1,
+                                          final_broadcast_info$row_2,
+                                          final_broadcast_info$row_3,
+                                          "\n",
+                                          sep = " \n")
+webhook = readLines("C:/Users/jacob/Desktop/WNBA Schedule New/webhook.txt")
+#webhook = readLines("/home/pi/WNBA-Schedule/webhook.txt")
+
+date_today = format(Sys.time(),"%Y-%m-%d")
+
+date_string = format(Sys.time(),"%m/%d")
+
+relevant_games = paste(final_broadcast_info$all_together[which(final_broadcast_info$gameDate == date_today)],
+                       sep = "\n")
+
+finished_output = c(paste("#WNBA Schedule",date_string,":\n",sep = " "),
+                    ":trophy: = Commissioners Cup\n\n",
+                    relevant_games,
+                    "#WNBATwitter")
+
+slackr_bot1(finished_output, incoming_webhook_url = webhook)

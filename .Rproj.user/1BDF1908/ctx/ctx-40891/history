@@ -1,0 +1,512 @@
+if (incoming_webhook_url == "") {
+stop("No incoming webhook URL specified. Did you forget to call slackr_setup()?", call. = FALSE)
+}
+if (icon_emoji != "") { icon_emoji <- sprintf(', "icon_emoji": "%s"', icon_emoji)  }
+resp_ret <- ""
+if (!missing(...)) {
+# mimics capture.output
+# get the arglist
+args <- substitute(list(...))[-1L]
+# setup in-memory sink
+rval <- NULL
+fil <- textConnection("rval", "w", local = TRUE)
+sink(fil)
+on.exit({
+sink()
+close(fil)
+})
+# where we'll need to eval expressions
+pf <- parent.frame()
+# how we'll eval expressions
+evalVis <- function(expr) withVisible(eval(expr, pf))
+# for each expression
+for (i in seq_along(args)) {
+expr <- args[[i]]
+# do something, note all the newlines...Slack ``` needs them
+tmp <- switch(mode(expr),
+# if it's actually an expresison, iterate over it
+expression = {
+lapply(expr, evalVis)
+},
+# if it's a call or a name, eval, printing run output as if in console
+call = ,
+name = {
+list(evalVis(expr))
+},
+# if pretty much anything else (i.e. a bare value) just output it
+integer = ,
+double = ,
+complex = ,
+raw = ,
+logical = ,
+numeric = cat(sprintf("%s\n\n", as.character(expr))),
+character = cat(sprintf("%s\n\n", expr)),
+stop("mode of argument not handled at present by slackr"))
+for (item in tmp) if (item$visible) { cat(item$value); cat("\n") }
+}
+on.exit()
+sink()
+close(fil)
+# combined all of them (rval is a character vector)
+output <- paste0(rval, collapse="\n")
+loc <- Sys.getlocale('LC_CTYPE')
+Sys.setlocale('LC_CTYPE','C')
+on.exit(Sys.setlocale("LC_CTYPE", loc))
+resp <- POST(url = incoming_webhook_url, encode = "form",
+add_headers(`Content-Type` = "application/x-www-form-urlencoded",
+Accept = "*/*"), body = URLencode(sprintf("payload={\"channel\": \"%s\", \"username\": \"%s\", \"text\": \"%s\"%s}",
+channel, username, output, icon_emoji)))
+warn_for_status(resp)
+}
+return(invisible())
+}
+data = fromJSON(file="https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=50")
+games = data[["events"]]
+games_table = as.data.frame(do.call(rbind, games))
+games_table$competitions[[1]][["broadcasts"]]
+has_odds = NULL
+for (a in 1:length(games))
+{
+has_odds = as.vector(c(has_odds,games_table$competitions[[a]][[1]][["broadcasts"]]))
+}
+# webhook = readLines("C:/Users/jacob/Desktop/WNBA Schedule New/webhook.txt")
+# #webhook = readLines("/home/pi/WNBA-Schedule/webhook.txt")
+#
+# date_today = format(Sys.time(),"%Y-%m-%d")
+#
+# date_string = format(Sys.time(),"%m/%d")
+#
+# relevant_games = paste(final_broadcast_info$all_together[which(final_broadcast_info$gameDate == date_today)],
+#                        sep = "\n")
+#
+# finished_output = c(paste("#WNBA Schedule",date_string,":\n",sep = " "),
+#                     ":trophy: = Commissioners Cup\n\n",
+#                     relevant_games,
+#                     "#WNBATwitter")
+#
+# #slackr_bot1(finished_output, incoming_webhook_url = webhook)
+View(has_odds)
+games_table$has_odds = has_odds
+library(rjson)
+library(slackr)
+library(httr)
+slackr_bot1 <- function(...,
+channel=Sys.getenv("SLACK_CHANNEL"),
+username=Sys.getenv("SLACK_USERNAME"),
+icon_emoji=Sys.getenv("SLACK_ICON_EMOJI"),
+incoming_webhook_url=Sys.getenv("SLACK_INCOMING_URL_PREFIX")) {
+if (incoming_webhook_url == "") {
+stop("No incoming webhook URL specified. Did you forget to call slackr_setup()?", call. = FALSE)
+}
+if (icon_emoji != "") { icon_emoji <- sprintf(', "icon_emoji": "%s"', icon_emoji)  }
+resp_ret <- ""
+if (!missing(...)) {
+# mimics capture.output
+# get the arglist
+args <- substitute(list(...))[-1L]
+# setup in-memory sink
+rval <- NULL
+fil <- textConnection("rval", "w", local = TRUE)
+sink(fil)
+on.exit({
+sink()
+close(fil)
+})
+# where we'll need to eval expressions
+pf <- parent.frame()
+# how we'll eval expressions
+evalVis <- function(expr) withVisible(eval(expr, pf))
+# for each expression
+for (i in seq_along(args)) {
+expr <- args[[i]]
+# do something, note all the newlines...Slack ``` needs them
+tmp <- switch(mode(expr),
+# if it's actually an expresison, iterate over it
+expression = {
+lapply(expr, evalVis)
+},
+# if it's a call or a name, eval, printing run output as if in console
+call = ,
+name = {
+list(evalVis(expr))
+},
+# if pretty much anything else (i.e. a bare value) just output it
+integer = ,
+double = ,
+complex = ,
+raw = ,
+logical = ,
+numeric = cat(sprintf("%s\n\n", as.character(expr))),
+character = cat(sprintf("%s\n\n", expr)),
+stop("mode of argument not handled at present by slackr"))
+for (item in tmp) if (item$visible) { cat(item$value); cat("\n") }
+}
+on.exit()
+sink()
+close(fil)
+# combined all of them (rval is a character vector)
+output <- paste0(rval, collapse="\n")
+loc <- Sys.getlocale('LC_CTYPE')
+Sys.setlocale('LC_CTYPE','C')
+on.exit(Sys.setlocale("LC_CTYPE", loc))
+resp <- POST(url = incoming_webhook_url, encode = "form",
+add_headers(`Content-Type` = "application/x-www-form-urlencoded",
+Accept = "*/*"), body = URLencode(sprintf("payload={\"channel\": \"%s\", \"username\": \"%s\", \"text\": \"%s\"%s}",
+channel, username, output, icon_emoji)))
+warn_for_status(resp)
+}
+return(invisible())
+}
+data = fromJSON(file="https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=50")
+games = data[["events"]]
+games_table = as.data.frame(do.call(rbind, games))
+games_table$competitions[[1]][["broadcasts"]]
+has_odds = NULL
+for (a in 1:length(games))
+{
+has_odds = as.vector(c(has_odds,length(games_table$competitions[[a]][[1]][["broadcasts"]])))
+}
+games_table$has_odds = has_odds
+# webhook = readLines("C:/Users/jacob/Desktop/WNBA Schedule New/webhook.txt")
+# #webhook = readLines("/home/pi/WNBA-Schedule/webhook.txt")
+#
+# date_today = format(Sys.time(),"%Y-%m-%d")
+#
+# date_string = format(Sys.time(),"%m/%d")
+#
+# relevant_games = paste(final_broadcast_info$all_together[which(final_broadcast_info$gameDate == date_today)],
+#                        sep = "\n")
+#
+# finished_output = c(paste("#WNBA Schedule",date_string,":\n",sep = " "),
+#                     ":trophy: = Commissioners Cup\n\n",
+#                     relevant_games,
+#                     "#WNBATwitter")
+#
+# #slackr_bot1(finished_output, incoming_webhook_url = webhook)
+View(games_table)
+library(rjson)
+library(slackr)
+library(httr)
+slackr_bot1 <- function(...,
+channel=Sys.getenv("SLACK_CHANNEL"),
+username=Sys.getenv("SLACK_USERNAME"),
+icon_emoji=Sys.getenv("SLACK_ICON_EMOJI"),
+incoming_webhook_url=Sys.getenv("SLACK_INCOMING_URL_PREFIX")) {
+if (incoming_webhook_url == "") {
+stop("No incoming webhook URL specified. Did you forget to call slackr_setup()?", call. = FALSE)
+}
+if (icon_emoji != "") { icon_emoji <- sprintf(', "icon_emoji": "%s"', icon_emoji)  }
+resp_ret <- ""
+if (!missing(...)) {
+# mimics capture.output
+# get the arglist
+args <- substitute(list(...))[-1L]
+# setup in-memory sink
+rval <- NULL
+fil <- textConnection("rval", "w", local = TRUE)
+sink(fil)
+on.exit({
+sink()
+close(fil)
+})
+# where we'll need to eval expressions
+pf <- parent.frame()
+# how we'll eval expressions
+evalVis <- function(expr) withVisible(eval(expr, pf))
+# for each expression
+for (i in seq_along(args)) {
+expr <- args[[i]]
+# do something, note all the newlines...Slack ``` needs them
+tmp <- switch(mode(expr),
+# if it's actually an expresison, iterate over it
+expression = {
+lapply(expr, evalVis)
+},
+# if it's a call or a name, eval, printing run output as if in console
+call = ,
+name = {
+list(evalVis(expr))
+},
+# if pretty much anything else (i.e. a bare value) just output it
+integer = ,
+double = ,
+complex = ,
+raw = ,
+logical = ,
+numeric = cat(sprintf("%s\n\n", as.character(expr))),
+character = cat(sprintf("%s\n\n", expr)),
+stop("mode of argument not handled at present by slackr"))
+for (item in tmp) if (item$visible) { cat(item$value); cat("\n") }
+}
+on.exit()
+sink()
+close(fil)
+# combined all of them (rval is a character vector)
+output <- paste0(rval, collapse="\n")
+loc <- Sys.getlocale('LC_CTYPE')
+Sys.setlocale('LC_CTYPE','C')
+on.exit(Sys.setlocale("LC_CTYPE", loc))
+resp <- POST(url = incoming_webhook_url, encode = "form",
+add_headers(`Content-Type` = "application/x-www-form-urlencoded",
+Accept = "*/*"), body = URLencode(sprintf("payload={\"channel\": \"%s\", \"username\": \"%s\", \"text\": \"%s\"%s}",
+channel, username, output, icon_emoji)))
+warn_for_status(resp)
+}
+return(invisible())
+}
+data = fromJSON(file="https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=50")
+games = data[["events"]]
+games_table = as.data.frame(do.call(rbind, games))
+games_table$competitions[[1]][["broadcasts"]]
+has_odds = NULL
+for (a in 1:length(games))
+{
+has_odds = as.vector(c(has_odds,0 < length(games_table$competitions[[a]][[1]][["broadcasts"]])))
+}
+games_table$has_odds = has_odds
+# webhook = readLines("C:/Users/jacob/Desktop/WNBA Schedule New/webhook.txt")
+# #webhook = readLines("/home/pi/WNBA-Schedule/webhook.txt")
+#
+# date_today = format(Sys.time(),"%Y-%m-%d")
+#
+# date_string = format(Sys.time(),"%m/%d")
+#
+# relevant_games = paste(final_broadcast_info$all_together[which(final_broadcast_info$gameDate == date_today)],
+#                        sep = "\n")
+#
+# finished_output = c(paste("#WNBA Schedule",date_string,":\n",sep = " "),
+#                     ":trophy: = Commissioners Cup\n\n",
+#                     relevant_games,
+#                     "#WNBATwitter")
+#
+# #slackr_bot1(finished_output, incoming_webhook_url = webhook)
+View(games_table)
+library(rjson)
+library(slackr)
+library(httr)
+slackr_bot1 <- function(...,
+channel=Sys.getenv("SLACK_CHANNEL"),
+username=Sys.getenv("SLACK_USERNAME"),
+icon_emoji=Sys.getenv("SLACK_ICON_EMOJI"),
+incoming_webhook_url=Sys.getenv("SLACK_INCOMING_URL_PREFIX")) {
+if (incoming_webhook_url == "") {
+stop("No incoming webhook URL specified. Did you forget to call slackr_setup()?", call. = FALSE)
+}
+if (icon_emoji != "") { icon_emoji <- sprintf(', "icon_emoji": "%s"', icon_emoji)  }
+resp_ret <- ""
+if (!missing(...)) {
+# mimics capture.output
+# get the arglist
+args <- substitute(list(...))[-1L]
+# setup in-memory sink
+rval <- NULL
+fil <- textConnection("rval", "w", local = TRUE)
+sink(fil)
+on.exit({
+sink()
+close(fil)
+})
+# where we'll need to eval expressions
+pf <- parent.frame()
+# how we'll eval expressions
+evalVis <- function(expr) withVisible(eval(expr, pf))
+# for each expression
+for (i in seq_along(args)) {
+expr <- args[[i]]
+# do something, note all the newlines...Slack ``` needs them
+tmp <- switch(mode(expr),
+# if it's actually an expresison, iterate over it
+expression = {
+lapply(expr, evalVis)
+},
+# if it's a call or a name, eval, printing run output as if in console
+call = ,
+name = {
+list(evalVis(expr))
+},
+# if pretty much anything else (i.e. a bare value) just output it
+integer = ,
+double = ,
+complex = ,
+raw = ,
+logical = ,
+numeric = cat(sprintf("%s\n\n", as.character(expr))),
+character = cat(sprintf("%s\n\n", expr)),
+stop("mode of argument not handled at present by slackr"))
+for (item in tmp) if (item$visible) { cat(item$value); cat("\n") }
+}
+on.exit()
+sink()
+close(fil)
+# combined all of them (rval is a character vector)
+output <- paste0(rval, collapse="\n")
+loc <- Sys.getlocale('LC_CTYPE')
+Sys.setlocale('LC_CTYPE','C')
+on.exit(Sys.setlocale("LC_CTYPE", loc))
+resp <- POST(url = incoming_webhook_url, encode = "form",
+add_headers(`Content-Type` = "application/x-www-form-urlencoded",
+Accept = "*/*"), body = URLencode(sprintf("payload={\"channel\": \"%s\", \"username\": \"%s\", \"text\": \"%s\"%s}",
+channel, username, output, icon_emoji)))
+warn_for_status(resp)
+}
+return(invisible())
+}
+data = fromJSON(file="https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=50")
+games = data[["events"]]
+games_table = as.data.frame(do.call(rbind, games))
+games_table$competitions[[1]][["broadcasts"]]
+has_odds = NULL
+for (a in 1:length(games))
+{
+has_odds = as.vector(c(has_odds,0 < length(games_table$competitions[[a]][[1]][["odds"]])))
+}
+games_table$has_odds = has_odds
+# webhook = readLines("C:/Users/jacob/Desktop/WNBA Schedule New/webhook.txt")
+# #webhook = readLines("/home/pi/WNBA-Schedule/webhook.txt")
+#
+# date_today = format(Sys.time(),"%Y-%m-%d")
+#
+# date_string = format(Sys.time(),"%m/%d")
+#
+# relevant_games = paste(final_broadcast_info$all_together[which(final_broadcast_info$gameDate == date_today)],
+#                        sep = "\n")
+#
+# finished_output = c(paste("#WNBA Schedule",date_string,":\n",sep = " "),
+#                     ":trophy: = Commissioners Cup\n\n",
+#                     relevant_games,
+#                     "#WNBATwitter")
+#
+# #slackr_bot1(finished_output, incoming_webhook_url = webhook)
+View(games_table)
+games_clean = games_table[,c("id","shortName","has_odds")]
+View(games_clean)
+View(games_table)
+games_clean = games_table[,c("id","shortName","has_odds","date")]
+games_clean$date_clean = as.POSIXct(games_clean$date, format="%Y-%m-%dT%H:%M", tz="UTC")
+games_clean$date_clean = timestamp(timestamp=games_clean$date, "%Y-%m-%dT%H:%M")
+View(games_table)
+View(games_clean)
+games_clean$date_clean = timestamp(timestamp=games_clean$date, "%Y-%m-%dT%H:%MZ")
+games_clean$date_clean = timestamp(timestamp=as.vector(games_clean$date), "%Y-%m-%dT%H:%MZ")
+games_clean$date_clean = timestamp(timestamp=as.vector(games_clean$date[1]), "%Y-%m-%dT%H:%MZ")
+games_clean$date_clean = timestamp(timestamp="2023-11-22T00:00Z", "%Y-%m-%dT%H:%MZ")
+games_clean$date_clean = timestamp("2023-11-22T00:00Z", "%Y-%m-%dT%H:%MZ")
+%Y-%m-%dT%H:%MZ2023-11-22T00:00Z ------##
+games_clean$date_clean = strptime("2023-11-22T00:00Z", "%Y-%m-%dT%H:%MZ")
+games_clean$date_clean = as.character(strptime("2023-11-22T00:00Z", "%Y-%m-%dT%H:%MZ"))
+games_clean$date_clean = as.character(strptime("2023-11-22T00:00Z", "%Y-%m-%dT%H:%MZ",tz = "UTC"))
+games_clean$date_clean = (strptime("2023-11-22T00:00Z", "%Y-%m-%dT%H:%MZ",tz = "UTC"))
+View(games_clean[[5]][[1]])
+games_clean$date_clean = (strptime(games_clean$date, "%Y-%m-%dT%H:%MZ",tz = "UTC"))
+View(games_clean[[5]][[1]])
+games_clean$date_clean = with_tz((strptime(games_clean$date, "%Y-%m-%dT%H:%MZ",tz = "UTC")),"CST")
+library(lubridate)
+games_clean$date_clean = with_tz((strptime(games_clean$date, "%Y-%m-%dT%H:%MZ",tz = "UTC")),"CST")
+games_clean$date_clean = with_tz((strptime(games_clean$date, "%Y-%m-%dT%H:%MZ",tz = "UTC")),"CET")
+games_clean$date_clean = with_tz((strptime(games_clean$date, "%Y-%m-%dT%H:%MZ",tz = "UTC")),"CDT")
+?with_tz
+games_clean$date_clean = with_tz((strptime(games_clean$date, "%Y-%m-%dT%H:%MZ",tz = "UTC")),"America/Chicago")
+games_clean$date_clean = as.vector(with_tz((strptime(games_clean$date, "%Y-%m-%dT%H:%MZ",tz = "UTC")),"America/Chicago"))
+games_clean$date_clean = as.character(with_tz((strptime(games_clean$date, "%Y-%m-%dT%H:%MZ",tz = "UTC")),"America/Chicago"))
+library(rjson)
+library(slackr)
+library(httr)
+library(lubridate)
+slackr_bot1 <- function(...,
+channel=Sys.getenv("SLACK_CHANNEL"),
+username=Sys.getenv("SLACK_USERNAME"),
+icon_emoji=Sys.getenv("SLACK_ICON_EMOJI"),
+incoming_webhook_url=Sys.getenv("SLACK_INCOMING_URL_PREFIX")) {
+if (incoming_webhook_url == "") {
+stop("No incoming webhook URL specified. Did you forget to call slackr_setup()?", call. = FALSE)
+}
+if (icon_emoji != "") { icon_emoji <- sprintf(', "icon_emoji": "%s"', icon_emoji)  }
+resp_ret <- ""
+if (!missing(...)) {
+# mimics capture.output
+# get the arglist
+args <- substitute(list(...))[-1L]
+# setup in-memory sink
+rval <- NULL
+fil <- textConnection("rval", "w", local = TRUE)
+sink(fil)
+on.exit({
+sink()
+close(fil)
+})
+# where we'll need to eval expressions
+pf <- parent.frame()
+# how we'll eval expressions
+evalVis <- function(expr) withVisible(eval(expr, pf))
+# for each expression
+for (i in seq_along(args)) {
+expr <- args[[i]]
+# do something, note all the newlines...Slack ``` needs them
+tmp <- switch(mode(expr),
+# if it's actually an expresison, iterate over it
+expression = {
+lapply(expr, evalVis)
+},
+# if it's a call or a name, eval, printing run output as if in console
+call = ,
+name = {
+list(evalVis(expr))
+},
+# if pretty much anything else (i.e. a bare value) just output it
+integer = ,
+double = ,
+complex = ,
+raw = ,
+logical = ,
+numeric = cat(sprintf("%s\n\n", as.character(expr))),
+character = cat(sprintf("%s\n\n", expr)),
+stop("mode of argument not handled at present by slackr"))
+for (item in tmp) if (item$visible) { cat(item$value); cat("\n") }
+}
+on.exit()
+sink()
+close(fil)
+# combined all of them (rval is a character vector)
+output <- paste0(rval, collapse="\n")
+loc <- Sys.getlocale('LC_CTYPE')
+Sys.setlocale('LC_CTYPE','C')
+on.exit(Sys.setlocale("LC_CTYPE", loc))
+resp <- POST(url = incoming_webhook_url, encode = "form",
+add_headers(`Content-Type` = "application/x-www-form-urlencoded",
+Accept = "*/*"), body = URLencode(sprintf("payload={\"channel\": \"%s\", \"username\": \"%s\", \"text\": \"%s\"%s}",
+channel, username, output, icon_emoji)))
+warn_for_status(resp)
+}
+return(invisible())
+}
+data = fromJSON(file="https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=50")
+games = data[["events"]]
+games_table = as.data.frame(do.call(rbind, games))
+games_table$competitions[[1]][["broadcasts"]]
+has_odds = NULL
+for (a in 1:length(games))
+{
+has_odds = as.vector(c(has_odds,0 < length(games_table$competitions[[a]][[1]][["odds"]])))
+}
+games_table$has_odds = has_odds
+games_clean = games_table[,c("id","shortName","has_odds","date")]
+games_clean$date = as.character(with_tz((strptime(games_clean$date, "%Y-%m-%dT%H:%MZ",tz = "UTC")),"America/Chicago"))
+# webhook = readLines("C:/Users/jacob/Desktop/WNBA Schedule New/webhook.txt")
+# #webhook = readLines("/home/pi/WNBA-Schedule/webhook.txt")
+#
+# date_today = format(Sys.time(),"%Y-%m-%d")
+#
+# date_string = format(Sys.time(),"%m/%d")
+#
+# relevant_games = paste(final_broadcast_info$all_together[which(final_broadcast_info$gameDate == date_today)],
+#                        sep = "\n")
+#
+# finished_output = c(paste("#WNBA Schedule",date_string,":\n",sep = " "),
+#                     ":trophy: = Commissioners Cup\n\n",
+#                     relevant_games,
+#                     "#WNBATwitter")
+#
+# #slackr_bot1(finished_output, incoming_webhook_url = webhook)
+View(games_table)
+View(games_clean)
+View(games_clean)

@@ -1,0 +1,315 @@
+library(XML)
+library(RCurl)
+library(stringr)
+library(xml2)
+library("xtable")
+library(lubridate)
+
+options(error = function() { 
+  write(paste0(Sys.time()," : ",geterrmessage(),"\n"),file = "error_log.txt", append = T)
+  if(!interactive()) stop(geterrmessage())
+})
+
+#setwd("/var/www/html/td/")
+
+check_game <- function(game_id) {
+  url = paste0("http://stats.ncaa.org/contests/livestream_scoreboards/",game_id,"/box_score")
+  print(game_id)
+  ####### Scratch paper
+  
+  doc = htmlParse(url)
+  if (grepl("Box score not available",paste(capture.output(doc),collapse = '')))
+  {
+    return(NULL)
+  }
+  if (grepl("Waiting for game to initialize",paste(capture.output(doc),collapse = '')))
+  {
+    return(NULL)
+  }
+  tableNodes = getNodeSet(doc, "//table")
+  tableNodes_1 = tableNodes[which(grepl("competitor", sapply(tableNodes, xmlGetAttr, "id")))]
+  block = capture.output(tableNodes_1[[1]][["thead"]][["tr"]][["td"]])[2]
+  cut_before = gsub(".*alt=\"", "", block)
+  team_name_1 = gsub("\" src=.*", "", cut_before)
+  block = capture.output(tableNodes_1[[2]][["thead"]][["tr"]][["td"]])[2]
+  cut_before = gsub(".*alt=\"", "", block)
+  team_name_2 = gsub("\" src=.*", "", cut_before)
+  print(tableNodes_1)
+  team_1_box = readHTMLTable(tableNodes_1[[1]])
+  team_2_box = readHTMLTable(tableNodes_1[[2]])
+  colnames(team_1_box) = sub("\n.*", "", colnames(team_1_box))
+  team_1_box_trim = team_1_box[, c("Name", "PTS", "Rebs", "A", "B", "S")]
+  colnames(team_2_box) = sub("\n.*", "", colnames(team_2_box))
+  team_2_box_trim = team_2_box[, c("Name", "PTS", "Rebs", "A", "B", "S")]
+  
+  ####### Getting time remaining
+  
+  tableNodes_2 = tableNodes[which(grepl("linescore", sapply(tableNodes, xmlGetAttr, "id")))]
+  trying = xmlChildren(xmlChildren(xmlChildren(tableNodes_2[[1]])[["tbody"]])[[1]])
+  clock = paste(capture.output(trying), collapse = '')
+  clock_after = gsub(".*clock_", "", clock)
+  clock_clean = gsub("<.*", "", clock_after)
+  clock_final = gsub(".*>", "", clock_clean)
+  
+  clock_split = str_split(clock_final, ":")[[1]]
+  clock_minutes = as.numeric(clock_split[1]) + 
+    as.numeric(clock_split[2]) / 60
+  
+  period_after = gsub(".*period_", "", clock)
+  period_clean = gsub("<.*", "", period_after)
+  period_final = gsub(".*>", "", period_clean)
+  
+  period_num = as.numeric(substr(period_final, 1, 1))
+
+  if (is.na(period_num))
+  {
+    return(NULL)
+  }
+  
+  if (period_num <= 4)
+  {
+    time_remaining = ((4 - period_num) * 10) + clock_minutes
+    game_length = 40
+  } else {
+    time_remaining = clock_minutes
+    game_length = 40 + ((period_num - 4) * 10)
+  }
+  
+  time_played = game_length - time_remaining
+  time_ratio = (game_length / time_played)
+  
+  team_1_box_trim[, 2:6] = apply(team_1_box_trim[, 2:6], 2, as.numeric)
+  team_1_box_trim[, 2:6][is.na(team_1_box_trim[, 2:6])] = 0
+  team_2_box_trim[, 2:6] = apply(team_2_box_trim[, 2:6], 2, as.numeric)
+  team_2_box_trim[, 2:6][is.na(team_2_box_trim[, 2:6])] = 0
+  
+  prorated_1 = data.frame(time_ratio * team_1_box_trim[, 2:6])
+  prorated_2 = data.frame(time_ratio * team_2_box_trim[, 2:6])
+  rownames(prorated_1) = team_1_box_trim$Name
+  rownames(prorated_2) = team_2_box_trim$Name
+  
+  team_1_box_trim$actual_doubles =
+    (team_1_box_trim$PTS >= 10) +
+    (team_1_box_trim$Rebs >= 10) +
+    (team_1_box_trim$A >= 10) +
+    (team_1_box_trim$B >= 10) +
+    (team_1_box_trim$S >= 10)
+  
+  team_2_box_trim$actual_doubles =
+    (team_2_box_trim$PTS >= 10) +
+    (team_2_box_trim$Rebs >= 10) +
+    (team_2_box_trim$A >= 10) +
+    (team_2_box_trim$B >= 10) +
+    (team_2_box_trim$S >= 10)
+  
+  team_1_box_trim$near_doubles =
+    (team_1_box_trim$PTS >= 6) +
+    (team_1_box_trim$Rebs >= 7) +
+    (team_1_box_trim$A >= 8) +
+    (team_1_box_trim$B >= 8) +
+    (team_1_box_trim$S >= 8)
+  
+  team_2_box_trim$near_doubles =
+    (team_2_box_trim$PTS >= 6) +
+    (team_2_box_trim$Rebs >= 7) +
+    (team_2_box_trim$A >= 8) +
+    (team_2_box_trim$B >= 8) +
+    (team_2_box_trim$S >= 8)
+  
+  team_1_box_trim$prorated_doubles =
+    (prorated_1$PTS >= 8) +
+    (prorated_1$Rebs >= 9) +
+    (prorated_1$A >= 10) +
+    (prorated_1$B >= 10) +
+    (prorated_1$S >= 10)
+  
+  team_2_box_trim$prorated_doubles =
+    (prorated_2$PTS >= 8) +
+    (prorated_2$Rebs >= 9) +
+    (prorated_2$A >= 10) +
+    (prorated_2$B >= 10) +
+    (prorated_2$S >= 10)
+  
+  team_1_box_trim$max = apply(team_1_box_trim[,c(7,8,9)],1,max)
+  team_2_box_trim$max = apply(team_2_box_trim[,c(7,8,9)],1,max)
+
+  team_1_filtered = team_1_box_trim[which(team_1_box_trim$max >= 3),]
+  team_2_filtered = team_2_box_trim[which(team_2_box_trim$max >= 3),]
+  
+  if (length(team_1_filtered$Name) >= 1)
+  {
+    team_1_filtered$max = team_name_1
+    team_1_filtered$opp = team_name_2
+    team_1_filtered$period = period_final
+    team_1_filtered$clock = clock_final
+  }
+
+  if (length(team_2_filtered$Name) >= 1)
+  {
+    team_2_filtered$max = team_name_2
+    team_2_filtered$opp = team_name_1
+    team_2_filtered$period = period_final
+    team_2_filtered$clock = clock_final
+  }
+  final_output = rbind(team_1_filtered,team_2_filtered)
+  return(final_output)
+}
+
+capture_paste <- function(x) {
+  return(paste(capture.output(x),collapse = ""))
+}
+
+generate_game_list <- function() {
+  today = as.character(Sys.Date())
+  
+  day = substr(today,9,10)
+  month = substr(today,6,7)
+  year = substr(today,1,4)
+  url = paste0("http://stats.ncaa.org/season_divisions/18220/livestream_scoreboards?utf8=%E2%9C%93&season_division_id=&game_date=",month,"%2F",day,"%2F",year,"&conference_id=0&tournament_id=&commit=Submit")
+  doc = htmlParse(url)
+  scriptNodes = getNodeSet(doc, "//script")
+  scriptNodes = unlist(lapply(scriptNodes,capture_paste))
+  scriptNodes = scriptNodes[which(grepl("livestream_box_score_",scriptNodes))]
+  hidden_games_1 = gsub(".*livestream_box_score_","",scriptNodes)
+  hidden_games = substr(hidden_games_1,1,7)
+  tableNodes = getNodeSet(doc, "//a")
+  tableNodes = tableNodes[which((
+    grepl("LIVE_BOX_SCORE", sapply(tableNodes, xmlGetAttr, "target"))))]
+  
+  links = unlist(lapply(tableNodes,xmlGetAttr,name = "href"))
+  
+  game_ids = gsub("/contests/livestream_scoreboards/","",links)
+  game_ids = gsub("/box_score","",game_ids)
+  game_ids = game_ids[which(!(game_ids %in% hidden_games))]
+  return(game_ids)
+}
+
+run_list <- function() {
+  completed_games = NULL
+  near_games = NULL
+  prorated_games = NULL
+  
+  
+  game_ids = generate_game_list()
+  
+  for (g in game_ids)
+  {
+    checked_game = check_game(g)
+    if (length(checked_game$Name) >= 1)
+    {
+      print(checked_game)
+    }
+    completed_games = rbind(
+      completed_games,
+      checked_game[which(checked_game$actual_doubles >= 3),])
+    near_games = rbind(
+      near_games,
+      checked_game[which(checked_game$near_doubles >= 3),])
+    prorated_games = rbind(
+      prorated_games,
+      checked_game[which(checked_game$prorated_doubles >= 3),])
+    
+    Sys.sleep(3)
+  }
+  
+  if (length(completed_games$Name) == 0)
+  {
+    completed_message = "<a>None</a>"
+  } else {
+    completed_games = completed_games[,c("Name","max","opp","PTS","Rebs","A","B","S","period","clock")]
+    colnames(completed_games) = c("Name","Team","Opp","PTS","REB","AST","BLK","STL","P","Clock")
+    completed_message = print(xtable(completed_games, digits = 0), type="html")
+  }
+  if (length(near_games$Name) == 0)
+  {
+    near_message = "<a>None</a>"
+  } else {
+    near_games = near_games[,c("Name","max","opp","PTS","Rebs","A","B","S","period","clock")]
+    colnames(near_games) = c("Name","Team","Opp","PTS","REB","AST","BLK","STL","P","Clock")
+    near_message = print(xtable(near_games, digits = 0), type="html")
+  }
+  if (length(prorated_games$Name) == 0)
+  {
+    prorated_message = "<a>None</a>"
+  } else {
+    prorated_games = prorated_games[,c("Name","max","opp","PTS","Rebs","A","B","S","period","clock")]
+    colnames(prorated_games) = c("Name","Team","Opp","PTS","REB","AST","BLK","STL","P","Clock")
+    prorated_message = print(xtable(prorated_games, digits = 0), type="html")
+  }
+  
+  rawHTML = paste0("<html>
+  <head>
+    <meta http-equiv=\"refresh\" content=\"3\">
+  </head>
+  <body>
+    <h2>There are ",length(game_ids)," active games</h2>
+    <h3>Actual Triple-Doubles</h3>
+      replace_this_1
+    <h3>Close Triple-Doubles</h3>
+      replace_this_2
+    <h3>Prorated Triple-Doubles</h3>
+      replace_this_3
+    <p>Last Updated: ",Sys.time(),"</p>
+  </body>
+</html>
+")
+  
+  rawHTML = sub("replace_this_1",completed_message,rawHTML)
+  rawHTML = sub("replace_this_2",near_message,rawHTML)
+  rawHTML = sub("replace_this_3",prorated_message,rawHTML)
+  
+  write(rawHTML,"output.html")
+  return(length(game_ids))
+}
+
+
+calc_wait <- function() {
+  today = as.character(Sys.time())
+  
+  day = substr(today,9,10)
+  month = substr(today,6,7)
+  year = substr(today,1,4)
+  reformated_date = paste(month,day,year,sep = "/")
+  url = paste0("http://stats.ncaa.org/season_divisions/18220/livestream_scoreboards?utf8=%E2%9C%93&season_division_id=&game_date=",month,"%2F",day,"%2F",year,"&conference_id=0&tournament_id=&commit=Submit")
+  doc = htmlParse(url)
+  timeNodes = getNodeSet(doc, "//td")
+  timeNodes = unlist(lapply(timeNodes,capture_paste))
+  timeNodes = timeNodes[which(grepl(reformated_date,timeNodes))]
+  times_a = gsub(paste0(".*",reformated_date," "),"",timeNodes)
+  times = gsub("  (.*)","",times_a)
+  times = force_tz(strptime(times, "%I:%M %p"),tzone = "America/New_York")
+  time_now = force_tz(strptime(substr(today,12,16),"%H:%M"), tzone = "America/Chicago")
+  times_later = (times >= time_now)
+  times_before = (times <= time_now)
+  if (length(times[which(times_later)]) >= 1)
+  {
+    next_game = min(times[which(times_later)])
+  } else {
+    next_game = force_tz(strptime(paste0(substr(today,1,8),as.numeric(substr(today,9,10)) + 1),"%Y-%m-%d"), tzone = "America/Chicago")
+  }
+  
+  wait_time = as.numeric(difftime(next_game, time_now, units = "secs"))
+  
+  return(wait_time)
+}
+
+while (TRUE)
+{
+  b = run_list()
+  print("waiting...")
+  if (b == 0)
+  {
+    ####### Calculate time in seconds to the game, set as variable and sleep to it
+    ######### If next game tomorrow, sleep to midnight, and the run at midnight
+    wait_time = calc_wait()
+    print(paste0("waiting more...",wait_time))
+    Sys.sleep(wait_time)
+  }
+  Sys.sleep(10)
+}
+
+#### Other stuff to maybe add?
+######## Schedule to start around the first game of the day
+######## Change from table format to written format?
+######## Emails? Maybe for completed ones only? Daily recap?
+######## Add functionality for completed game box scores too?
