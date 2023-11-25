@@ -113,7 +113,6 @@ while (TRUE)
 {
   date = format(Sys.Date(),"%Y%m%d")
   data = fromJSON(file=paste0("https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=50&dates=",as.character(date)))
-  #data = fromJSON(file="scoreboard.json")
   games = data[["events"]]
   
   games_previous = read.csv('all_games.csv')
