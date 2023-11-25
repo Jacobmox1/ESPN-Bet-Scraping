@@ -162,6 +162,6 @@ while (TRUE)
     slackr_bot1(finished_output, incoming_webhook_url = webhook)
   } else {
     wait_time = calc_wait()
-    cat("waiting more...",wait_time)
+    cat("\n waiting more...",wait_time)
     Sys.sleep(wait_time)  }
 }
